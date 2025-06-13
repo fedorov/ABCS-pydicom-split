@@ -37,6 +37,7 @@ class DICOMDirectory:
     def __next__(self):
         while self.filenames:
             filename = self.filenames.pop(0)
+            print(self._directory+'/'+filename)
             path = os.path.join(self._directory, filename)
             try:
                 dataset = pydicom.dcmread(path)
@@ -244,6 +245,7 @@ def parse_patient(patient, delimiter='_'):
         warnings.warn('patient %s ends with %s, removing...' % (patient,
                                                                 ids[-1]))
         trailing = delimiter + ids.pop()
+    print("Parsed IDs:"+str(ids))
     return [delimiter.join((root, re.sub("[^0-9]", "", id_))) for id_ in ids], trailing
 
 def parse_patient_TB(patient, delimiter='_'):
@@ -360,11 +362,12 @@ def get_patient_TB(patient_name, patient_id, n, patient_names=None, patient_ids=
 
     return (patient_names, patient_ids), Sequence([source_patient]), (name_trailing, id_trailing)
 def get_patient(patient_name, patient_id, n, patient_names=None, patient_ids=None, order=None):
+    print(patient_name, patient_id, n, patient_names, patient_ids, order)
     name_trailing, id_trailing = '', ''
     if patient_names is None:
         patient_names, name_trailing = parse_patient(patient_name)
     if patient_ids is None:
-        patient_ids, id_trailing = parse_patient(patient_name)
+        patient_ids, id_trailing = parse_patient(patient_id)
         # in case patient id format is different
         # patient_ids, id_trailing = parse_patient(patient_id)
     # print(patient_names)
@@ -392,7 +395,8 @@ def get_patient(patient_name, patient_id, n, patient_names=None, patient_ids=Non
     # FIXME: remove '_1'?
     source_patient.PatientName = patient_name
     source_patient.PatientID = patient_id
-
+    print("Source patient: ", patient_id)
+    print("Result: ", patient_ids)
     return (patient_names, patient_ids), Sequence([source_patient]), (name_trailing, id_trailing)
 
 
@@ -465,6 +469,8 @@ def split_dicom_directory(directory, axis=0, n=3, nTB=None, offset=5, keep_origi
             else:
                 parsed, dataset.SourcePatientGroupIdentificationSequence, trailing = get_patient(dataset.PatientName, dataset.PatientID, n, patient_names, patient_ids, order)
 
+                print(parsed)
+
 
             parsed_patient_names, parsed_patient_ids = parsed
 
@@ -499,6 +505,7 @@ def split_dicom_directory(directory, axis=0, n=3, nTB=None, offset=5, keep_origi
 
                     if series_descriptions:
                         split_dataset.SeriesDescription = series_descriptions[i]
+                    """
                     else:
                         if split_dataset.Modality == 'PT':
                             split_dataset.SeriesDescription = parsed_patient_ids[i] + '.pet split'
@@ -506,7 +513,7 @@ def split_dicom_directory(directory, axis=0, n=3, nTB=None, offset=5, keep_origi
                             split_dataset.SeriesDescription = parsed_patient_ids[i] + '.ct split'
                         else:
                             split_dataset.SeriesDescription += ' split'
-
+                    """
                     split_dataset.PatientName = parsed_patient_names[i]
                     split_dataset.PatientID = parsed_patient_ids[i]
 
