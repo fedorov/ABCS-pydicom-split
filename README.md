@@ -1,3 +1,10 @@
+# About
+
+This repository contains a fork of https://github.com/abcsFrederick/ABCS-pydicom-split customized to support processing of the mouse imaging data collected by the University of Washington Co-Clinical Imaging Research Program (see https://sites.uw.edu/cocirp/ for details) and being prepared for public release as part of the [NCI Co-Clinical Imaging Research Resources Program (CIRP)](https://dctd.cancer.gov/research/networks/cirp) initiative activities.
+
+At this time, there is no plan to contribute the changes in this branch upstream, since it is not clear if those are of more general utility. Please see commit history for the nature of changes. Please open issues if you have any questions!
+
+
 # pydicom_split
 
 ### 1. Description
