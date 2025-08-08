@@ -14,6 +14,30 @@ import pydicom
 from pydicom.sequence import Sequence
 from pydicom.dataset import Dataset
 
+class UIDGenerator:
+
+    def __init__(self):
+        self._study_uids = {}
+        self._series_uids = {}
+
+    def generate_study_uid(self, PatientID, StudyDate):
+        if self._study_uids.get((PatientID, StudyDate)):
+            return self._study_uids.get((PatientID, StudyDate))
+        # Generate a new UID based on PatientID and StudyDate
+        uid = x667_uuid()
+        self._study_uids[(PatientID, StudyDate)] = uid
+        return uid
+
+    def generate_series_uid(self, PatientID, StudyDate, Modality):
+        if self._series_uids.get((PatientID, StudyDate, Modality)):
+            return self._series_uids.get((PatientID, StudyDate, Modality))
+        # Generate a new UID based on PatientID, StudyDate, and Modality
+        uid = x667_uuid()
+        self._series_uids[(PatientID, StudyDate, Modality)] = uid
+        return uid
+
+    def get_all_uids(self):
+        return self._study_uids, self._series_uids
 
 class DICOMDirectory:
     def __init__(self, directory=None):
@@ -245,8 +269,8 @@ def parse_patient(patient, delimiter='_'):
         warnings.warn('patient %s ends with %s, removing...' % (patient,
                                                                 ids[-1]))
         trailing = delimiter + ids.pop()
-    print("Parsed IDs:"+str(ids))
-    return [delimiter.join((root, re.sub("[^0-9]", "", id_))) for id_ in ids], trailing
+    #print("Parsed IDs:"+str(ids))
+    return [delimiter.join((root, id_)) for id_ in ids], trailing
 
 def parse_patient_TB(patient, delimiter='_'):
     root, *ids = str(patient).split(delimiter)
@@ -362,7 +386,7 @@ def get_patient_TB(patient_name, patient_id, n, patient_names=None, patient_ids=
 
     return (patient_names, patient_ids), Sequence([source_patient]), (name_trailing, id_trailing)
 def get_patient(patient_name, patient_id, n, patient_names=None, patient_ids=None, order=None):
-    print(patient_name, patient_id, n, patient_names, patient_ids, order)
+    #print(patient_name, patient_id, n, patient_names, patient_ids, order)
     name_trailing, id_trailing = '', ''
     if patient_names is None:
         patient_names, name_trailing = parse_patient(patient_name)
@@ -395,8 +419,8 @@ def get_patient(patient_name, patient_id, n, patient_names=None, patient_ids=Non
     # FIXME: remove '_1'?
     source_patient.PatientName = patient_name
     source_patient.PatientID = patient_id
-    print("Source patient: ", patient_id)
-    print("Result: ", patient_ids)
+    #print("Source patient: ", patient_id)
+    #print("Result: ", patient_ids)
     return (patient_names, patient_ids), Sequence([source_patient]), (name_trailing, id_trailing)
 
 
@@ -420,6 +444,12 @@ def split_dicom_directory(directory, axis=0, n=3, nTB=None, offset=5, keep_origi
                           derivation_description=None, patient_names=None,
                           patient_ids=None, output_paths=None,
                           mangle_output_paths=False, order=None, orderT=None, orderB=None):
+    print("Splitting DICOMs in directory %s" % directory)
+    print("Using these series_instance_uids:", series_instance_uids)
+    print("Using these study_instance_uids:", study_instance_uids)
+
+    uid_generator = UIDGenerator()
+
     if nTB is not None:
         orderT = orderT.split(',')
         orderB = orderB.split(',')
@@ -444,7 +474,11 @@ def split_dicom_directory(directory, axis=0, n=3, nTB=None, offset=5, keep_origi
             raise ValueError
     for directoryChecked, newRoot in checkDirectory(directory, output_dir):
 
+        print("Directory checked: ", directoryChecked)
+
         for path, dataset in DICOMDirectory(directoryChecked):
+
+            print("Processing files in ", path)
             try:
                 pixel_array = dataset.pixel_array
             except (TypeError, AttributeError):
@@ -469,18 +503,23 @@ def split_dicom_directory(directory, axis=0, n=3, nTB=None, offset=5, keep_origi
             else:
                 parsed, dataset.SourcePatientGroupIdentificationSequence, trailing = get_patient(dataset.PatientName, dataset.PatientID, n, patient_names, patient_ids, order)
 
-                print(parsed)
+                #print(parsed)
 
 
             parsed_patient_names, parsed_patient_ids = parsed
 
             name_trailing, id_trailing = trailing
 
+            """
             if not study_instance_uids:
                 study_instance_uids = [x667_uuid() for i in range(n)]
 
             if not series_instance_uids:
+                print("Generating new series_instance_uids")
                 series_instance_uids = [x667_uuid() for i in range(n)]
+            else:
+                print("Using provided series_instance_uids")
+            """
 
             for i, origin, pixel_array in dicom_splitter:
                 if parsed_patient_names[i] != 'blank':
@@ -498,10 +537,21 @@ def split_dicom_directory(directory, axis=0, n=3, nTB=None, offset=5, keep_origi
                     split_dataset.SOPInstanceUID = x667_uuid()
                     split_dataset.file_meta.MediaStorageSOPInstanceUID = split_dataset.SOPInstanceUID
 
-                    split_dataset.StudyInstanceUID = study_instance_uids[i]
+                    split_dataset.StudyInstanceUID = uid_generator.generate_study_uid(parsed_patient_ids[i],
+                                                                                      split_dataset.StudyDate)
+                    # NOT study_instance_uids[i]
 
-                    split_dataset.SeriesInstanceUID = series_instance_uids[i]
-                    split_dataset.StorageMediaFileSetUID = series_instance_uids[i] + '.0'
+                    #print('Modality of the split series: ', split_dataset.Modality)
+                    split_dataset.SeriesInstanceUID = uid_generator.generate_series_uid(parsed_patient_ids[i],
+                                                                                      split_dataset.StudyDate,
+                                                                                      split_dataset.Modality)
+                    
+                    # NOT series_instance_uids[i]
+                    split_dataset.StorageMediaFileSetUID = split_dataset.SeriesInstanceUID+".0"
+                    if len(split_dataset.StorageMediaFileSetUID) > 64:
+                        # abort with error
+                        raise ValueError('StorageMediaFileSetUID is too long: %s' % split_dataset.StorageMediaFileSetUID)
+                    # NOT series_instance_uids[i] + '.0'
 
                     if series_descriptions:
                         split_dataset.SeriesDescription = series_descriptions[i]
@@ -565,7 +615,7 @@ if __name__ == '__main__':
     parser.add_argument('-orderB', '--orderB', help='order of patient placed in scanner of bottom bed', default='1,1,1')
     parser.add_argument('-offset', '--offset', type=int, default=5,
                         help='offset from center, default 5 percent from center')
-
+    
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument('-n', type=int, help='split into N volumes')
     group.add_argument('-nTB', nargs='*', help='split into N volumes of top and bottom beds')
