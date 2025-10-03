@@ -425,7 +425,7 @@ def get_patient(patient_name, patient_id, n, patient_names=None, patient_ids=Non
 
 
 def set_pixel_data(dataset, pixel_array):
-    dataset.PixelData = pixel_array.tostring()
+    dataset.PixelData = pixel_array.tobytes()
     dataset.Rows, dataset.Columns = pixel_array.shape
 
 def checkDirectory(directory, output_dir=None):
